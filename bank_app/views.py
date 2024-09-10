@@ -4,6 +4,7 @@ from rest_framework import status
 from .models import Customer,Account,Transaction
 from .serializers import CustomerSerializer,AccountSerializer,TransactionSerializer
 from django.views.decorators.csrf import csrf_exempt, csrf_protect
+from django.http import Http404
 # Create your views here.
 
 # customer API
@@ -121,15 +122,35 @@ class TransactionListCreateAPI(APIView):
             "data": serializer.data
         }, status=status.HTTP_200_OK)
 
-    @csrf_exempt
     def post(self, request):
         serializer = TransactionSerializer(data=request.data)
         if serializer.is_valid():
-            serializer.save()
+            transaction_type=serializer.validated_data['transaction_type']
+            amount=serializer.validated_data['amount']
+            account=serializer.validated_data['account']
+
+            if transaction_type == 'DEPOSIT':
+                account.balance += amount
+            elif transaction_type == 'WITHDRAW':
+                if account.balance >= amount:
+                    account.balance -= amount
+                else:
+                    return Response({
+                        "message": "Insufficient balance.",
+                        "errors": {"balance": "You cannot withdraw more than the available balance."}
+                    }, status=status.HTTP_400_BAD_REQUEST)
+
+            # Save the account balance update
+            account.save(update_fields=['balance'])
+
+            # Now save the transaction
+            transaction = serializer.save()
+
             return Response({
                 "message": "Transaction created successfully.",
-                "data": serializer.data
+                "data": TransactionSerializer(transaction).data
             }, status=status.HTTP_201_CREATED)
+
         return Response({
             "message": "Failed to create transaction.",
             "errors": serializer.errors
@@ -138,11 +159,11 @@ class TransactionListCreateAPI(APIView):
 
 class TransactionDetailApi(APIView):
     
-    def get_object(self,request,pk):
+    def get_object(self, pk):
         try:
             return Transaction.objects.get(pk=pk)
         except Transaction.DoesNotExist:
-            raise None
+            raise Http404  # Use Http404 for not found
 
     def handle_object_not_found(self):
         return Response({
@@ -150,36 +171,39 @@ class TransactionDetailApi(APIView):
             "error_code": "TRANSACTION_NOT_FOUND"
         }, status=status.HTTP_404_NOT_FOUND)
 
-    def get(self,request,pk):
-        transaction=self.get_object(pk)
-        if transaction is None:
+    def get(self, request, pk):
+        try:
+            transaction = self.get_object(pk)
+            serializer = TransactionSerializer(transaction)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except Http404:
             return self.handle_object_not_found()
-        serializer = TransactionSerializer(transaction)
-        return Response(serializer.data,status=status.HTTP_200_OK)
     
-    @csrf_exempt
-    def put(self,request,pk):
-        transaction = self.get_object(pk)
-        if transaction is None:
-            return self.handle_object_not_found()
-        serializer = TransactionSerializer(transaction,data=request.data)
-        if serializer.is_valid():
-            serializer.save()
+    @csrf_exempt  # If needed; otherwise, consider removing this decorator
+    def put(self, request, pk):
+        try:
+            transaction = self.get_object(pk)
+            serializer = TransactionSerializer(transaction, data=request.data)
+            if serializer.is_valid():
+                serializer.save()
+                return Response({
+                    "message": "Transaction updated successfully.",
+                    "data": serializer.data
+                }, status=status.HTTP_200_OK)
             return Response({
-                "message": "Transaction updated successfully.",
-                "data": serializer.data
-            }, status=status.HTTP_200_OK)
-        return Response({
-            "message": "Failed to update transaction.",
-            "errors": serializer.errors
-        }, status=status.HTTP_400_BAD_REQUEST)
-    
-    def delete(self,request,pk):
-        transaction = self.get_object(pk)
-        if transaction is None:
+                "message": "Failed to update transaction.",
+                "errors": serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+        except Http404:
             return self.handle_object_not_found()
-        transaction.delete()
-        return Response({
-            "message": "Transaction deleted successfully."
-        }, status=status.HTTP_204_NO_CONTENT)
+    
+    def delete(self, request, pk):
+        try:
+            transaction = self.get_object(pk)
+            transaction.delete()
+            return Response({
+                "message": "Transaction deleted successfully."
+            }, status=status.HTTP_204_NO_CONTENT)
+        except Http404:
+            return self.handle_object_not_found()
 

@@ -11,19 +11,19 @@ class UserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model=User
-        field=['username','first_name','last_name','email','password','confirm_password']
+        fields = ['username','first_name','last_name','email','password','confirm_password']
         extra_kwargs={
             'password':{'write_only':True},
             'confirm_password':{'write_only':True},
         }
 
     def validate_username(self,value):
-        if User.objects.filter(username=value).axists():
+        if User.objects.filter(username=value).exists():
             raise serializers.ValidationError('username is already taken')
         return value
 
     def validate_email(self,value):
-        if User.objects.filter(email=value).axists():
+        if User.objects.filter(email=value).exists():
             raise serializers.ValidationError('email is already registered')
     
     def validate(self,data):

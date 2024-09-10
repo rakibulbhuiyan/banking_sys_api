@@ -1,4 +1,5 @@
 from django.db import models
+from django.db.models import F
 
 # Create your models here.
 class Customer(models.Model):
@@ -27,6 +28,17 @@ class Transaction(models.Model):
     transaction_type = models.CharField(max_length=10, choices=[('DEPOSIT', 'Deposit'), ('WITHDRAW', 'Withdraw')])
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     transaction_date = models.DateTimeField(auto_now_add=True)
+
+    # def save(self, *args, **kwargs):
+    #     if self.transaction_type == 'DEPOSIT':
+    #         self.account.balance += self.amount
+    #     elif self.transaction_type == 'WITHDRAW':
+    #         if self.account.balance >= self.amount:
+    #             self.account.balance -= self.amount
+    #         else:
+    #             raise ValueError("Insufficient balance.")  # Add custom error handling if needed
+    #     self.account.save(update_fields=['balance'])
+    #     super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.transaction_type} - {self.amount}"
